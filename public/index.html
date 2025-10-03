@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>API Viewer</title>
+    <style>
+      :root{--bg:#0f1223;--fg:#e7e9ee;--muted:#a7adc0;--card:#171b34;--accent:#6ea8fe;--ok:#37c97b;--err:#ff6b6b}
+      html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial}
+      header{padding:20px 16px;background:linear-gradient(90deg,#111634,#0f1223)}
+      h1{margin:0;font-size:22px}
+      main{display:grid;gap:16px;padding:16px}
+      .grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+      .card{background:var(--card);border:1px solid #23284a;border-radius:12px;overflow:hidden}
+      .card header{background:transparent;border-bottom:1px solid #23284a;padding:12px 14px}
+      .card h2{margin:0;font-size:16px}
+      .content{padding:12px 14px}
+      form{display:grid;gap:8px;margin-bottom:12px}
+      input,textarea,button{font:inherit}
+      input,textarea{background:#0f142c;color:var(--fg);border:1px solid #2a2f55;border-radius:8px;padding:8px}
+      textarea{min-height:70px}
+      button{background:var(--accent);border:none;color:#0b0e1d;border-radius:8px;padding:8px 10px;cursor:pointer}
+      button:disabled{opacity:.6;cursor:not-allowed}
+      ul{list-style:none;padding:0;margin:0;display:grid;gap:8px}
+      li{background:#111634;border:1px solid #23284a;border-radius:8px;padding:8px}
+      .muted{color:var(--muted)}
+      .row{display:flex;gap:8px;align-items:center}
+      .row>*{flex:1}
+      .small{font-size:12px}
+      .sep{height:1px;background:#23284a;margin:12px 0}
+      .note{color:var(--muted);margin:0 0 8px 0}
+      .ok{color:var(--ok)}
+      .err{color:var(--err)}
+      footer{padding:16px;color:var(--muted);text-align:center}
+      code{background:#0d1126;border:1px solid #23284a;border-radius:6px;padding:2px 6px}
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Console Web — API SQLite</h1>
+      <p class="muted small">Consomme les endpoints existants: <code>/users</code>, <code>/posts</code>, <code>/comments</code>.</p>
+      <div class="row" style="margin-top:8px">
+        <button id="seed-btn" title="Insérer des données de démo">Seed DB</button>
+        <span id="seed-msg" class="small muted"></span>
+      </div>
+    </header>
+    <main>
+      <div id="root"></div>
+    </main>
+    <footer>
+      <span class="small">Servez via <code>npm start</code> puis ouvrez <code>http://localhost:3000</code>.</span>
+    </footer>
+
+    <script>
+      async function api(path, options = {}){
+        const res = await fetch(path, {
+          headers: { 'Content-Type': 'application/json', ...(options.headers||{}) },
+          ...options,
+        });
+        if(!res.ok){
+          const text = await res.text().catch(()=> '');
+          throw new Error(text || (res.status + ' ' + res.statusText));
+        }
+        const ct = res.headers.get('content-type')||'';
+        return ct.includes('application/json') ? res.json() : res.text();
+      }
+    </script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script type="text/babel">
+      const { useEffect, useState } = React;
+
+      function Section({ title, children }){
+        return (
+          <div className="card">
+            <header><h2>{title}</h2></header>
+            <div className="content">{children}</div>
+          </div>
+        );
+      }
+
+      function Users(){
+        const [users, setUsers] = useState([]);
+        const [loading, setLoading] = useState(false);
+        const [msg, setMsg] = useState('');
+        const [first, setFirst] = useState('');
+        const [last, setLast] = useState('');
+        const load = async ()=>{
+          setLoading(true); setMsg('');
+          try{ const data = await api('/users'); setUsers(data); }
+          catch(e){ setMsg(e.message); }
+          finally{ setLoading(false); }
+        };
+        useEffect(()=>{ load(); },[]);
+        const submit = async (e)=>{
+          e.preventDefault(); setMsg('');
+          try{
+            await api('/users', { method:'POST', body: JSON.stringify({ first_name:first, last_name:last })});
+            setFirst(''); setLast(''); setMsg('Créé'); load();
+          }catch(e){ setMsg(e.message); }
+        };
+        const edit = async (id)=>{
+          const fn = prompt('Nouveau first_name (laisser vide pour ne pas changer):');
+          const ln = prompt('Nouveau last_name (laisser vide pour ne pas changer):');
+          if(fn===null && ln===null) return;
+          await api(`/users/${id}`, { method:'PUT', body: JSON.stringify({ first_name: fn||undefined, last_name: ln||undefined })});
+          load();
+        };
+        const del = async (id)=>{
+          if(!confirm(`Supprimer l'utilisateur #${id} ?`)) return;
+          await api(`/users/${id}`, { method:'DELETE' });
+          load();
+        };
+        return (
+          <Section title="Users">
+            <form onSubmit={submit}>
+              <div className="row">
+                <input value={first} onChange={(e)=>setFirst(e.target.value)} placeholder="first_name" required />
+                <input value={last} onChange={(e)=>setLast(e.target.value)} placeholder="last_name" required />
+              </div>
+              <button type="submit">Créer user</button>
+              <p className={`small ${msg? (msg==='Créé'?'ok':'err'):'muted'}`}>{msg}</p>
+            </form>
+            <div className="sep"></div>
+            <button onClick={load} disabled={loading}>{loading?'Chargement...':'Rafraîchir'}</button>
+            <ul>
+              {users.length===0 && !loading && <li className="muted">Aucun user</li>}
+              {users.map(u=> (
+                <li key={u.id}>
+                  <div className="row">
+                    <div style={{flex:2}}><strong>#{u.id}</strong> {u.first_name} {u.last_name}</div>
+                    <div style={{display:'flex', gap:6, justifyContent:'flex-end'}}>
+                      <button onClick={()=>edit(u.id)}>Éditer</button>
+                      <button onClick={()=>del(u.id)}>Supprimer</button>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </Section>
+        );
+      }
+
+      function Posts(){
+        const [posts, setPosts] = useState([]);
+        const [loading, setLoading] = useState(false);
+        const [msg, setMsg] = useState('');
+        const [userId, setUserId] = useState('');
+        const [title, setTitle] = useState('');
+        const [content, setContent] = useState('');
+        const load = async ()=>{
+          setLoading(true); setMsg('');
+          try{ const data = await api('/posts'); setPosts(data); }
+          catch(e){ setMsg(e.message); }
+          finally{ setLoading(false); }
+        };
+        useEffect(()=>{ load(); },[]);
+        const submit = async (e)=>{
+          e.preventDefault(); setMsg('');
+          try{
+            await api('/posts', { method:'POST', body: JSON.stringify({ user_id:Number(userId), title, content })});
+            setUserId(''); setTitle(''); setContent(''); setMsg('Créé'); load();
+          }catch(e){ setMsg(e.message); }
+        };
+        const edit = async (id)=>{
+          const t = prompt('Nouveau titre (laisser vide pour ne pas changer):');
+          const c = prompt('Nouveau contenu (laisser vide pour ne pas changer):');
+          if(t===null && c===null) return;
+          await api(`/posts/${id}`, { method:'PUT', body: JSON.stringify({ title: t||undefined, content: c||undefined })});
+          load();
+        };
+        const del = async (id)=>{
+          if(!confirm(`Supprimer le post #${id} ?`)) return;
+          await api(`/posts/${id}`, { method:'DELETE' });
+          load();
+        };
+        return (
+          <Section title="Posts">
+            <form onSubmit={submit}>
+              <div className="row">
+                <input value={userId} onChange={(e)=>setUserId(e.target.value)} type="number" placeholder="user_id" required />
+                <input value={title} onChange={(e)=>setTitle(e.target.value)} placeholder="title" required />
+              </div>
+              <textarea value={content} onChange={(e)=>setContent(e.target.value)} placeholder="content" required />
+              <button type="submit">Créer post</button>
+              <p className={`small ${msg? (msg==='Créé'?'ok':'err'):'muted'}`}>{msg}</p>
+            </form>
+            <div className="sep"></div>
+            <button onClick={load} disabled={loading}>{loading?'Chargement...':'Rafraîchir'}</button>
+            <ul>
+              {posts.length===0 && !loading && <li className="muted">Aucun post</li>}
+              {posts.map(p=> (
+                <li key={p.id}>
+                  <div className="row">
+                    <div style={{flex:2}}>
+                      <strong>#{p.id}</strong> {p.title} <span className="muted">par</span> {p.first_name} {p.last_name}
+                      <div className="small muted">{p.created_at||''}</div>
+                      <div>{p.content}</div>
+                    </div>
+                    <div style={{display:'flex', gap:6, justifyContent:'flex-end'}}>
+                      <button onClick={()=>edit(p.id)}>Éditer</button>
+                      <button onClick={()=>del(p.id)}>Supprimer</button>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </Section>
+        );
+      }
+
+      function Comments(){
+        const [items, setItems] = useState([]);
+        const [msg, setMsg] = useState('');
+        const [postId, setPostId] = useState('');
+        const [formPostId, setFormPostId] = useState('');
+        const [userId, setUserId] = useState('');
+        const [content, setContent] = useState('');
+
+        const load = async ()=>{
+          setMsg('');
+          const pid = Number(postId);
+          if(!pid){ setItems([]); return; }
+          try{ const data = await api(`/posts/${pid}/comments`); setItems(data); }
+          catch(e){ setMsg(e.message); }
+        };
+
+        const submit = async (e)=>{
+          e.preventDefault(); setMsg('');
+          const pid = Number(formPostId);
+          try{
+            await api(`/posts/${pid}/comments`, { method:'POST', body: JSON.stringify({ user_id:Number(userId), content })});
+            setFormPostId(''); setUserId(''); setContent(''); setMsg('Créé'); load();
+          }catch(e){ setMsg(e.message); }
+        };
+
+        const edit = async (id)=>{
+          const c = prompt('Nouveau contenu:');
+          if(c===null) return;
+          await api(`/comments/${id}`, { method:'PUT', body: JSON.stringify({ content: c })});
+          load();
+        };
+        const del = async (id)=>{
+          if(!confirm(`Supprimer le commentaire #${id} ?`)) return;
+          await api(`/comments/${id}`, { method:'DELETE' });
+          load();
+        };
+
+        return (
+          <Section title="Comments">
+            <form onSubmit={submit}>
+              <div className="row">
+                <input value={formPostId} onChange={(e)=>setFormPostId(e.target.value)} type="number" placeholder="post_id" required />
+                <input value={userId} onChange={(e)=>setUserId(e.target.value)} type="number" placeholder="user_id" required />
+              </div>
+              <textarea value={content} onChange={(e)=>setContent(e.target.value)} placeholder="content" required />
+              <button type="submit">Créer comment</button>
+              <p className={`small ${msg? (msg==='Créé'?'ok':'err'):'muted'}`}>{msg}</p>
+            </form>
+            <div className="sep"></div>
+            <p className="note small">Lister par post: entrez un ID de post ci-dessous.</p>
+            <div className="row">
+              <input value={postId} onChange={(e)=>setPostId(e.target.value)} type="number" placeholder="post_id" />
+              <button onClick={load}>Rafraîchir</button>
+            </div>
+            <ul>
+              {(!postId || items.length===0) && <li className="muted">{postId? 'Aucun commentaire' : 'Entrez un post_id pour lister les commentaires'}</li>}
+              {items.map(c=> (
+                <li key={c.id}>
+                  <div className="row">
+                    <div style={{flex:2}}>
+                      <strong>#{c.id}</strong> {c.content}
+                      <div className="small muted">par {c.first_name} {c.last_name} — {c.created_at||''}</div>
+                    </div>
+                    <div style={{display:'flex', gap:6, justifyContent:'flex-end'}}>
+                      <button onClick={()=>edit(c.id)}>Éditer</button>
+                      <button onClick={()=>del(c.id)}>Supprimer</button>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </Section>
+        );
+      }
+
+      function App(){
+        return (
+          <section className="grid">
+            <Users />
+            <Posts />
+            <Comments />
+          </section>
+        );
+      }
+
+      const root = ReactDOM.createRoot(document.getElementById('root'));
+      root.render(<App />);
+    </script>
+  </body>
+  </html>
+
+

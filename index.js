@@ -67,6 +67,8 @@ function seedDatabase() {
     });
 }
 
+// Exposer seedDatabase sans casser l'import existant dans server.js
+db.seedDatabase = seedDatabase;
 module.exports = db;
 
 if (require.main === module) {

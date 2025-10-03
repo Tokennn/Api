@@ -5,6 +5,8 @@ const app = express();
 const PORT = 3000;
 
 app.use(express.json());
+// Servir les fichiers statiques depuis ./public
+app.use(express.static("public"));
 
 app.get("/users", (req, res) => {
   db.all("SELECT * FROM users", (err, rows) => {
@@ -206,6 +208,19 @@ app.delete("/users/:id", (req, res) => {
       return res.status(204).send();
     }
   );
+});
+
+// Endpoint d'amorçage de la base
+app.post("/admin/seed", (req, res) => {
+  try {
+    if (typeof db.seedDatabase === 'function') {
+      db.seedDatabase();
+      return res.status(200).json({ ok: true });
+    }
+    return res.status(500).json({ error: "seedDatabase non disponible" });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
 });
 
 app.listen(PORT, () => {
