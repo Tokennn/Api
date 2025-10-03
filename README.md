@@ -1,3 +1,5 @@
 ## Aperçu
 
-![Démonstration](true.gif)
+<p align="center">
+  <img src="true.gif" alt="Démonstration" />
+</p>

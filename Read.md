@@ -1,3 +1,0 @@
-## Aperçu
-
-![Démonstration](true.gif)
